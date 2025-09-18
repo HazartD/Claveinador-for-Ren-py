@@ -11,13 +11,11 @@ fn main() -> io::Result<()> {
     println!("- By now, you should have your translation folder somewhere else. \nIf you want to keep it in the \"tl\" folder, along with the new generation, rename it with an underscore or something similar.\nNext, you should have the folder with the new generation of translations.");
     println!("- First, enter the folder with your translation, then the new empty folder with the new keys.");
     println!("Note: it's not necessary for both folders to be in \"./tl\"; the new folder will be in the same location as the new folder, adding \"_new\" to the end of the name.");
-    println!("Select mode:\n(1) - file\n(2) - folder\nSelected mode:");
 
-    let mode = get_bool_for_input_1_or_2("Select mode:\n(1) - file\n(2) - folder\nSelected mode:","file","folder");
+    let mode = get_bool_for_input_1_or_2("Select mode:\n(1) - file\n(2) - folder","file","folder");
 
 
-    println!("Please be sure that the matching files are in the same rute in both folder.\n
-    If a file changed path will no problem, just fix the \"# game/.../file.rpy:\" later");
+    println!("Please be sure that the matching files are in the same rute in both folder.\nIf the dev changed a file path, will no problem, just fix the \"# game/.../file.rpy:\" later");
     println!("Please be sure that the files are correct");
 
     if mode{
@@ -40,59 +38,49 @@ fn get_bool_for_input_1_or_2(indication:&str,true_print:&str, false_print:&str) 
     loop {
         println!("{}",indication);
         let mut _bool = get_input().unwrap();
-        _bool.trim();
+        // _bool = _bool.trim();
         
-        match _bool.as_str() {
-            "1" => {print!("{}",true_print) ;return true},
-            "2" => {print!("{}",false_print) ;return false},
+        match _bool.trim() {
+            "1" => {println!("{}",true_print) ;return true},
+            "2" => {println!("{}",false_print) ;return false},
             _ => eprintln!("Invalid input")
         }
     }
 }
+fn get_path_input(message:&str, is_file: bool) -> String {
+    loop{
+        println!("{}",message);
+        let _path = get_input().unwrap();
+        let path=_path.trim_end_matches("\r\n").replace('\\', "/");
+        println!("path: {:?}",Path::new(&path));
+        if is_file{
+            if Path::new(&path).exists(){break path}
+            else {println!("invalid input")}    }
+        else{
+            if Path::new(&path).exists(){break path}
+            else {println!("invalid input")}    }
+    }
+}
 
 fn folder_mode() -> io::Result<()>{
+    println!("Do you want the diffs in one file, or diffs files for each file?");
+    // println!("Select mode:\n(1) - one diffs file \n(2) - many diffs files\nSelected mode:");
+    let diff_in_one_file = get_bool_for_input_1_or_2("Select mode:\n(1) - one diffs file \n(2) - many diffs files", "one file", "many files");
 
-    let mut old_path:String = String::new();
-    loop{
-        println!("Enter old folder:");
-        old_path = get_input().unwrap();
-        if Path::new(&old_path).is_dir(){break;}
-        else {print!("invalid input")}
-    };
-    let mut new_path:String = String::new();
-    loop {
-        println!("Enter new folder:");
-        old_path = get_input().unwrap();
-        if Path::new(&new_path).is_dir(){break;}
-        else {print!("invalid input")}
-    }
+    let old_path:String = get_path_input("Enter old folder:", false);
+    let new_path:String = get_path_input("Enter new folder:", false);
+    let _ = process_file(&old_path, &new_path, diff_in_one_file);
+    
     // for {
 
     // }
-    println!("Do you want the diffs in one file, or diffs files for each file?");
-    println!("Select mode:\n(1) - one diffs file \n(2) - many diffs files\nSelected mode:");
-    let diff_in_one_file = get_bool_for_input_1_or_2("Select mode:\n(1) - one diffs file \n(2) - many diffs files\nSelected mode:", "one file", "many files");
-    let _ = process_file(&old_path, &new_path, diff_in_one_file);
-    
     todo!();
     // Ok(())
 }
 
 fn file_mode() -> io::Result<()>{
-        let mut old_path:String = String::new();
-    loop{
-        println!("Enter old folder:");
-        old_path = get_input().unwrap();
-        if Path::new(&old_path).exists(){break;}
-        else {print!("invalid input")}
-    };
-    let mut new_path:String = String::new();
-    loop {
-        println!("Enter new folder:");
-        old_path = get_input().unwrap();
-        if Path::new(&new_path).exists(){break;}
-        else {print!("invalid input")}
-    }
+    let old_path:String = get_path_input("Enter old file:", true);
+    let new_path:String = get_path_input("Enter new file:", true);
     let _ = process_file(&old_path, &new_path,true);
     todo!();
     // Ok(())

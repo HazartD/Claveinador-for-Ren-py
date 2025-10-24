@@ -1,4 +1,4 @@
-use std::fs::File;
+use std::fs::{self, DirEntry, File};
 use std::io::{self, BufRead, BufReader, BufWriter, Write};
 // use std::ops::Index;
 use std::path::{PathBuf, Path};
@@ -10,7 +10,9 @@ fn main() -> io::Result<()> {
     println!("Instructions:");
     println!("- By now, you should have your translation folder somewhere else. \nIf you want to keep it in the \"tl\" folder, along with the new generation, rename it with an underscore or something similar.\nNext, you should have the folder with the new generation of translations.");
     println!("- First, enter the folder with your translation, then the new empty folder with the new keys.");
-    println!("Note: it's not necessary for both folders to be in \"./tl\"; the new folder will be in the same location as the new folder, adding \"_new\" to the end of the name.");
+    println!("Notes:");
+    println!("- It's not necessary for both folders to be in \"./tl\"; the processed folder will be in the same location as the new folder, adding \"_new\" to the end of the name.");
+    println!("- A deleted line is indistinguishable from a changed line, so it can cause subsequent lines to no longer match. You can check the differences to see where the problem starts, then look for that line in the old file and delete it if it's not present in the new one.");
 
     let mode = get_bool_for_input_1_or_2("Select mode:\n(1) - file\n(2) - folder","file","folder");
 
@@ -54,12 +56,33 @@ fn get_path_input(message:&str, is_file: bool) -> String {
         let path=_path.trim_end_matches("\r\n").replace('\\', "/");
         println!("path: {:?}",Path::new(&path));
         if is_file{
-            if Path::new(&path).exists(){break path}
+            if Path::new(&path).is_file(){break path}
             else {println!("invalid input")}    }
         else{
-            if Path::new(&path).exists(){break path}
+            if Path::new(&path).is_dir(){break path}
             else {println!("invalid input")}    }
+            // if Path::new(&path).exists(){break path}
+            // Habia tenido que poner eso porque los is_... no funcionaban, saber porque, pero en 23-10-2025 si
     }
+}
+fn set_dir_entries(path:&Path,vec:&mut Vec<DirEntry>) -> io::Result<()>{
+    // println!("readelion episode 1: angle's attack");
+    for entry in fs::read_dir(path)? {
+        let entry: DirEntry = entry?;
+        let path: PathBuf = entry.path();
+        
+        if path.is_file() && path.extension().unwrap_or_default() == "rpy" {
+            // println!("file found");
+            vec.push(entry);
+        }
+        else if path.is_dir(){
+            // println!("dir found");
+            let _= set_dir_entries(&entry.path(), vec);
+        }
+        else {println!("is not a file or dir")}
+    }
+    // println!("end of readelion");
+    Ok(())
 }
 
 fn folder_mode() -> io::Result<()>{
@@ -71,8 +94,16 @@ fn folder_mode() -> io::Result<()>{
     let new_path:String = get_path_input("Enter new folder:", false);
     let _ = process_file(&old_path, &new_path, diff_in_one_file);
     
-    // for {
+    // let dir = fs::read_dir(old_path)?;
+    let mut old_files: Vec<DirEntry> = Vec::new();
+    let _= set_dir_entries(&Path::new(&old_path),&mut old_files);
+    println!("old file list: {:?}",old_files);
 
+    let mut new_files: Vec<DirEntry> = Vec::new();
+    let _= set_dir_entries(&Path::new(&new_path),&mut new_files);
+    println!("new file list: {:?}",new_files);
+    // for file in new_files{
+        
     // }
     todo!();
     // Ok(())
@@ -254,3 +285,6 @@ fn is_next_key_line(line: &str) -> bool {
     //
     //ya mas loco despues, podria hacer que en vez de tener las 2 carpetas y te genere una tercera
     //metes el link de un repositorio o lo que verga sea, y asi solo tienes 1 y genera la segunda
+    // 
+    //talvez debe hacer que las old_new esten en otra lista, y se procesen todo con otra funcion
+    //osea, que se ignoren al comparar y demas las otras.

@@ -1,27 +1,19 @@
 use std::collections::HashMap;
 use std::fs::{self, DirEntry, File};
-use std::io::{self, BufRead, BufReader, BufWriter, Write};
-// use std::ops::RemAssign
-// use std::ops::Index;
+use std::io::{self, BufWriter, Write};
 use std::path::{PathBuf, Path};
-// use std::process::Output;
-// use std::env;
 
 fn main() -> io::Result<()> {
 
     println!("Instructions:");
-    println!("- By now, you should have your translation folder somewhere else. \nIf you want to keep it in the \"tl\" folder, along with the new generation, rename it with an underscore or something similar.\nNext, you should have the folder with the new generation of translations.");
-    println!("- First, enter the folder with your translation, then the new empty folder with the new keys.");
+    println!("- By now, you should have the folder with the new generated translations, and, your completed translation folder somewhere else. \nIf you want to keep it in the \"tl\" folder, with the new generated folder, rename it with an underscore or something.");
+    println!("- First, enter the folder with your translation, then the new folder with the new keys.");
     println!("Notes:");
-    println!("- It's not necessary for both folders to be in \"./tl\"; the processed folder will be in the same location as the new folder, adding \"_new\" to the end of the name.");
-    println!("- A deleted line is indistinguishable from a changed line, so it can cause subsequent lines to no longer match. You can check the differences to see where the problem starts, then look for that line in the old file and delete it if it's not present in the new one.");
-    println!("- If there are files with the same name, even if they are in different folders, some may be ignored or changed folders when processed.");
+    println!("- The processed folder will be in the same location as the new folder, adding \"_new\" to the end of the name.");
+    println!("- A deleted or added line is indistinguishable from a changed line.");
+    println!("- The files are searched for by their name and the folder they'are in. If the developer moved a file to a different folder, or simply renamed it, they will be treated as separate files. You can process those files individually later.");
 
     let mode = get_bool_for_input_1_or_2("Select mode:\n(1) - file\n(2) - folder","file","folder");
-
-
-    println!("Please be sure that the matching files are in the same rute in both folder.\nIf the dev changed a file path, will no problem, just fix the \"# game/.../file.rpy:\" later");
-    println!("Please be sure that the files are correct");
 
     if mode{
         return file_mode();
@@ -94,8 +86,8 @@ fn wait_input() { println!("\nEnter to continue");
 }
 
 fn folder_mode() -> io::Result<()>{
-    println!("Do you want the diffs in one file, or diffs files for each file?");
-    let diff_in_one_file = get_bool_for_input_1_or_2("Select mode:\n(1) - one diffs file \n(2) - many diffs files", "one file", "many files");
+    // println!("Do you want the diffs in one file, or diffs files for each file?");
+    // let diff_in_one_file = get_bool_for_input_1_or_2("Select mode:\n(1) - one diffs file \n(2) - many diffs files", "one file", "many files");
 
     let old_path:String = get_path_input("Enter old folder:", false);
     let new_path:String = get_path_input("Enter new folder:", false);
@@ -119,177 +111,295 @@ fn folder_mode() -> io::Result<()>{
     for new_file in new_files{
         // let old_file = old_files.get(&new_file.0);
         if let Some(old_file) = old_files.get(&new_file.0){
-            let diff = process_file(&new_file.1,old_file, diff_in_one_file).unwrap();
+            println!("found file match: {}",new_file.0);//deberia comparar todos primero,luego meterlo en tupla y dejar los no matching.
+            let diff = process_file(&new_file.1,old_file);//, diff_in_one_file).unwrap()
             if !diff.is_empty() {
+                differences_in_file.push("\n".to_string());
+                differences_in_file.push(format!("In file: {}", new_file.1));
                 differences_in_file.extend(diff);
             }
             else {
                 no_matching_files.push(new_file.0);
             }
         }
-    }
-    todo!();
-    // Ok(())
+    };
+    println!("diff: {:?}",differences_in_file);
+    println!("no matching: {:?}",no_matching_files);
+    wait_input();
+    Ok(())
 }
 
 fn file_mode() -> io::Result<()>{
     let old_path:String = get_path_input("Enter old file:", true);
     let new_path:String = get_path_input("Enter new file:", true);
     wait_input();
-    let _ = process_file(&old_path, &new_path,true);
-    todo!();
-    // Ok(())
+    let diff = process_file(&old_path, &new_path);//,true
+    // todo!();
+    let _ = save_diff(&new_path,&diff);
+    wait_input();
+    Ok(())
+}
+
+fn process_file(old_path: &str, new_path: &str) -> Vec<String> {
+    let old_blocks = parse_translation_file(old_path);
+    let new_blocks = parse_translation_file(new_path);
+    let mut changes = Vec::new();
+    let mut processed_content = String::new();
+    // Esto es parte de que se deberia cambiar despues, que envez de un path y abrir,
+    // el parse reciba el archivo ya abierto.
+    let new_content = fs::read_to_string(new_path).expect("Failed to read new file");
+    for line in new_content.lines(){
+        if line.contains("# TODO:") {
+        processed_content.push_str(line);
+        processed_content.push('\n');
+        processed_content.push('\n');
+        break;
+        }
+    }
+    for new_block in &new_blocks {
+        // Añadir comentarios "# game/" que preceden al bloque
+        processed_content.push_str(&new_block.comment);
+        processed_content.push('\n');
+        
+        processed_content.push_str(&new_block.header);
+        processed_content.push('\n');
+        
+        // Buscar bloque viejo por HEADER EXACTO
+        if let Some(old_block) = old_blocks.iter().find(|b| b.header == new_block.header) {
+            if new_block.is_strings_block() {
+                let (string_content, string_changes) = process_strings_content(&old_block.lines, &new_block.lines);
+                processed_content.push_str(&string_content);
+                changes.extend(string_changes);
+            } else {
+                for line in &old_block.lines {
+                    processed_content.push_str(line);
+                    processed_content.push('\n');
+                }
+            }
+        } else {
+            for line in &new_block.lines {
+                processed_content.push_str(line);
+                processed_content.push('\n');
+            }
+            changes.push(format!("NEW: {}", new_block.header));
+        }
+    }
+    
+    for old_block in &old_blocks {
+        if !new_blocks.iter().any(|b| b.header == old_block.header) {
+            changes.push(format!("REMOVED: {}", old_block.header));
+        }
+    }
+    
+    if let Err(e) = create_processed_copy(new_path, &processed_content) {
+        eprintln!("Failed to create processed file: {}", e);
+    }
+    
+    changes
+}
+
+fn parse_translation_file(path: &str) -> Vec<TranslationBlock> {
+    let content = fs::read_to_string(path).expect("Failed to read file");
+    let mut blocks = Vec::new();
+    let mut current_block = TranslationBlock::new();
+    let mut comment = String::new();
+    
+    for line in content.lines() {
+        let trimmed = line.trim();
+        
+        if trimmed.starts_with("translate") {
+            if !current_block.header.is_empty() {
+                blocks.push(current_block);
+                current_block = TranslationBlock::new();
+            }
+            current_block.header = line.to_string();
+            current_block.comment = comment;
+            comment = String::new();
+        } else if trimmed.starts_with("# game/") {
+            comment = String::from(line);
+            if current_block.is_strings_block() {
+                // DENTRO de bloque strings → el comentario va a lines
+                current_block.lines.push(line.to_string());
+            } else {
+                // FUERA de bloque strings → va a comment
+                comment = line.to_string(); // Asignar String
+            }
+        } else if !current_block.header.is_empty() {
+            current_block.lines.push(line.to_string());
+        }
+    }
+    
+    if !current_block.header.is_empty() {
+        blocks.push(current_block);
+    }
+    
+    blocks
+}
+
+fn process_strings_content(old_lines: &[String], new_lines: &[String]) -> (String, Vec<String>) {
+    let mut content = String::new();
+    let mut changes = Vec::new();
+    
+    let old_strings = extract_string_pairs(old_lines);
+    let new_strings = extract_string_pairs(new_lines);
+    
+    for new_str in &new_strings {
+        // INCLUIR el comentario "# game/" ANTES de cada par old/new
+        if !new_str.comment.is_empty() {
+            content.push_str(&new_str.comment);
+            content.push('\n');
+        }
+        
+        if let Some(old_translation) = old_strings.iter().find(|s| s.old_lines == new_str.old_lines) {
+            // String existente - usar traducción vieja
+            for line in &old_translation.old_lines {
+                content.push_str(line);
+                content.push('\n');
+            }
+            for line in &old_translation.new_lines {
+                content.push_str(line);
+                content.push('\n');
+            }
+        } else {
+            // String nuevo - usar contenido nuevo
+            for line in &new_str.old_lines {
+                content.push_str(line);
+                content.push('\n');
+            }
+            for line in &new_str.new_lines {
+                content.push_str(line);
+                content.push('\n');
+            }
+            changes.push(format!("NEW_STRING: {:?}", new_str.old_lines));
+        }
+    }
+    
+    for old_str in &old_strings {
+        if !new_strings.iter().any(|s| s.old_lines == old_str.old_lines) {
+            changes.push(format!("MISSING_STRING: {:?}", old_str.old_lines));
+        }
+    }
+    
+    (content, changes)
+}
+
+// Mejorar la extracción de pares strings
+fn extract_string_pairs(lines: &[String]) -> Vec<StringPair> {
+    let mut pairs = Vec::new();
+    let mut current_old = Vec::new();
+    let mut current_new = Vec::new();
+    let mut current_comment = String::new();
+    let mut in_old = false;
+    let mut in_new = false;
+    
+    for line in lines {
+        let trimmed = line.trim();
+        
+        if trimmed.starts_with("# game/") {
+            // COMENTARIO: reiniciar y guardar para el próximo par
+            if !current_old.is_empty() || !current_new.is_empty() {
+                pairs.push(StringPair {
+                    comment: current_comment.clone(), // Usar el comentario actual
+                    old_lines: current_old,
+                    new_lines: current_new,
+                });
+                current_old = Vec::new();
+                current_new = Vec::new();
+            }
+            current_comment = line.to_string(); // Guardar NUEVO comentario
+            in_old = false;
+            in_new = false;
+        } else if trimmed.starts_with("old \"") {
+            if !current_old.is_empty() || !current_new.is_empty() {
+                pairs.push(StringPair {
+                    comment: current_comment.clone(),
+                    old_lines: current_old,
+                    new_lines: current_new,
+                });
+                current_old = Vec::new();
+                current_new = Vec::new();
+                current_comment.clear(); // Limpiar comentario después de usarlo
+            }
+            current_old.push(line.to_string());
+            in_old = true;
+            in_new = false;
+        } else if trimmed.starts_with("new \"") {
+            current_new.push(line.to_string());
+            in_new = true;
+            in_old = false;
+        } else if in_old {
+            current_old.push(line.to_string());
+        } else if in_new {
+            current_new.push(line.to_string());
+        }
+    }
+    
+    if !current_old.is_empty() || !current_new.is_empty() {
+        pairs.push(StringPair {
+            comment: current_comment,
+            old_lines: current_old,
+            new_lines: current_new,
+        });
+    }
+    
+    pairs
 }
 
 
+fn save_diff(new_path: &str, diff: &Vec<String>) -> io::Result<()> {
+    if diff.is_empty() {
+        return Ok(());
+    }
+    let mut output_path = PathBuf::from(new_path);
+    output_path.set_extension("txt");
+    
+    let output_file = File::create(&output_path)?;
+    let mut writer = BufWriter::new(output_file);
+    
+    for discrepancia in diff {
+        writeln!(writer, "{}", discrepancia)?;
+    }
+    writer.flush()?;
+    println!("diff: {}", output_path.display());
+    Ok(())
+}
+fn create_processed_copy(new_path: &str, processed_content: &str) -> std::io::Result<()> {
+    let path = Path::new(new_path);
+    let file_name = path.file_name().unwrap().to_str().unwrap();
+    let parent_dir = path.parent().unwrap_or(Path::new("."));
+    
+    let processed_path = parent_dir.join(format!("_processed_{}", file_name));
+    fs::write(processed_path, processed_content)
+}
 
 
+#[derive(Debug, PartialEq)]
+struct TranslationBlock {
+    header: String,
+    lines: Vec<String>,
+    comment: String, // Solo líneas "# game/" que preceden al bloque
+}
 
-        // fn process_file(old_path: &str, new_path: &str, diff_in_one_file:bool) -> io::Result<Vec<String>>{
-        //     let old_file = File::open(old_path)?;
-        //     let new_file = File::open(new_path)?;
-        //     println!("processing files:\n{}\n>\n{}",old_path,new_path);
-            
-        //     let old_reader = BufReader::new(old_file);
-        //     let new_reader = BufReader::new(new_file);
-        //     let old_blocks = get_blocks_one_file(old_reader);
-        //     let new_blocks = get_blocks_one_file(new_reader);
-            
-        //     let mut diff = Vec::new();
-        //     // Debe iniciar con el nombre de achivo
-        //     //y poner "No changes" si no cambio nada
-        //     // ¿Que tanta diferencia hay entre copiar un archivo nomas...
-        //     // ...y que lo vaya escribiendo sin encontrar diferencias?
-            
-        //     let mut  index_old = 0;
-        //     let mut index_new = 0;
-            
-        //     let mut temp_file_path = PathBuf::from(new_path);
-        //     temp_file_path.set_extension("tmp");
-            
-        //     let temp_file = File::create(&temp_file_path)?;
-        //     let mut temp_writer = BufWriter::new(temp_file);
-            
-        //     // Ok(diff)
-            
-        //     // diff.push(format!("Line {} (old) vs line {} (new): '{}' != '{}'",
-        //     //     linea_original_num, linea_nuevo_num, old_key, new_key));
+impl TranslationBlock {
+    fn new() -> Self {
+        Self {
+            header: String::new(),
+            lines: Vec::new(),
+            comment: String::new(),
+        }
+    }
+    
+    fn is_strings_block(&self) -> bool {
+        self.header.contains("strings:")
+    }
+}
 
-        //     while index_new < new_blocks.len() {
-        //     let new_block = &new_blocks[index_new];
-            
-        //     if index_old < old_blocks.len() {
-        //         let old_block = &old_blocks[index_old];
-                
-        //         let new_key = extraer_clave(&new_block[0]);
-        //         let old_key = extraer_clave(&old_block[0]);    
-        //         if new_key == old_key {
-        //             // COINCIDEN: Escribir bloque ORIGINAL (con traducción)
-        //             for linea in old_block {
-        //                 writeln!(temp_writer, "{}", linea)?;
-        //             }
-        //             index_old += 1;
-        //         } else {
-        //             // NO COINCIDEN: Escribir bloque NUEVO (sin cambios)
-        //             for linea in new_block {
-        //                 writeln!(temp_writer, "{}", linea)?;
-        //             }
-        //             diff.push(format!("differents: {} != {}", old_key, new_key));
-        //         }
-                
-                
-        //     } else {
-        //         // Se acabaron los bloques originales, copiar resto del NUEVO
-        //         for linea in new_block {
-        //             writeln!(temp_writer, "{}", linea)?;
-        //         }
-        //     }
-            
-        //         index_new += 1;
-        //     }
-        //     // Ok(diff)
-        //     if diff_in_one_file{
-        //         let _ = save_diff(new_path, &diff);
-        //     }
-        //     else {
-        //         return Ok(diff)
-        //     }
-        //     todo!();
-        //     // Ok(())
-        // }
-
-        // fn get_blocks_one_file(reader: BufReader<File>) -> Vec<Vec<String>> {//io::Result<Vec<Vec<String>>>
-        //     // let file = File::open(path);
-        //     // let reader = BufReader::new(file);
-        //     let mut blocks = Vec::new();
-        //     let mut block_actual = Vec::new();
-        //     let mut in_translate_block = false;
-        //     // let mut in_old_new_block = false;
-
-        //     for line in reader.lines() {
-        //         let _line = line.unwrap_or_default();
-                
-        //         if is_translation_line(&_line) {
-        //             if !block_actual.is_empty() {
-        //                 blocks.push(block_actual);
-        //             }
-        //             block_actual = Vec::new();
-        //             in_translate_block = true;
-                    
-        //         } else if in_translate_block && is_next_key_line(&_line) {
-        //             in_translate_block = false;
-        //         }
-                
-        //         block_actual.push(_line);
-                
-        //         if !in_translate_block && !block_actual.is_empty() {
-        //             blocks.push(block_actual);
-        //             block_actual = Vec::new();
-        //         }
-        //     }
-            
-        //     if !block_actual.is_empty() {
-        //         blocks.push(block_actual);
-        //     }
-            
-        //     blocks
-        // }
-
-        // fn extraer_clave(linea: &str) -> String {
-        //     let partes: Vec<&str> = linea.split_whitespace().collect();
-        //     if partes.len() >= 3 {
-        //         partes[2].trim_end_matches(':').to_string()
-        //     } else {
-        //         String::new()
-        //     }
-        // }
-
-        // fn save_diff(new_path: &str, diff: &Vec<String>) -> io::Result<()> {
-        //     if diff.is_empty() {
-        //         return Ok(());
-        //     }
-        //     let mut output_path = PathBuf::from(new_path);
-        //     output_path.set_extension("txt");
-            
-        //     let output_file = File::create(&output_path)?;
-        //     let mut writer = BufWriter::new(output_file);
-            
-        //     for discrepancia in diff {
-        //         writeln!(writer, "{}", discrepancia)?;
-        //     }
-        //     writer.flush()?;
-        //     println!("diff: {}", output_path.display());
-        //     Ok(())
-        // }
-
-        // fn is_translation_line(line: &str) ->bool {
-        //     !line.starts_with('#') && !line.starts_with("translate")
-        // }
-        // fn is_next_key_line(line: &str) -> bool {
-        //     // line.trim_star_matches(' ');
-        //     line.starts_with("translate ") ||
-        //     line.starts_with("# game/")
-        // }
+#[derive(Debug, PartialEq)]
+struct StringPair {
+    comment: String,
+    old_lines: Vec<String>, // Líneas que componen el old (pueden ser múltiples)
+    new_lines: Vec<String>, // Líneas que componen el new (pueden ser múltiples)
+}
 
     //tal vez sea de que primero compare la clave en su misma posicion, y si no coinciden mire todas
     //si la encuentra, la pone y cambia la clave original dispar a otra lista,

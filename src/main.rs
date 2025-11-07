@@ -1,17 +1,18 @@
 use std::collections::HashMap;
 use std::fs::{self, DirEntry, File};
 use std::io::{self, BufWriter, Write};
-use std::path::{PathBuf, Path};
+use std::path::{Path, PathBuf};
 
 fn main() -> io::Result<()> {
 
     println!("Instructions:");
     println!("- By now, you should have the folder with the new generated translations, and, your completed translation folder somewhere else. \nIf you want to keep it in the \"tl\" folder, with the new generated folder, rename it with an underscore or something.");
-    println!("- First, enter the folder with your translation, then the new folder with the new keys.");
+    println!("- First, enter the folder or file with your translation, then the new one with the new keys.");
     println!("Notes:");
-    println!("- The processed folder will be in the same location as the new folder, adding \"_new\" to the end of the name.");
-    println!("- A deleted or added line is indistinguishable from a changed line.");
-    println!("- The files are searched for by their name and the folder they'are in. If the developer moved a file to a different folder, or simply renamed it, they will be treated as separate files. You can process those files individually later.");
+    println!("- The processed folder will be in the same location as the new folder, adding \"_replaced\" to the end of the name.");
+    println!("- A deleted or added line is indistinguishable from a dialogue slightly changed.");
+    println!("- The files are searched for by their name and the folder they'are in. If the developer moved a file to a different folder, or simply renamed it, they will be treated as new files. You can process those files individually later.");
+    println!("- Folders with the name \"_replaced\" will be ignored.");
 
     let mode = get_bool_for_input_1_or_2("Select mode:\n(1) - file\n(2) - folder","file","folder");
 
@@ -21,9 +22,12 @@ fn main() -> io::Result<()> {
     else {
         return folder_mode();
     }
-    // Ok(())
 }
 
+fn wait_input() { println!("\nEnter to continue");
+    let mut input = String::new();
+    std::io::stdin().read_line(&mut input).unwrap();
+}
 fn get_input() ->io::Result<String>{
     let mut input = String::new();
     io::stdout().flush()?;
@@ -48,7 +52,8 @@ fn get_path_input(message:&str, is_file: bool) -> String {
     loop{
         println!("{}",message);
         let _path = get_input().unwrap();
-        let path=_path.trim_end_matches("\r\n").replace('\\', "/");
+        let path=_path.trim_end_matches(|c| c == '\r' || c == '\n' || c == '/' || c == '\\').replace('\\', "/");
+        // gracias a la doc que tenia un ejemplo de closure, sino iban a ser varios trim_end_matches()
         println!("path: {:?}",Path::new(&path));
         if is_file{
             if Path::new(&path).is_file(){break path}
@@ -60,45 +65,43 @@ fn get_path_input(message:&str, is_file: bool) -> String {
             // Habia tenido que poner eso porque los is_... no funcionaban, saber porque, pero en 23-10-2025 si
     }
 }
-fn set_dir_entries(path:&Path,map:&mut HashMap<String, String>) -> io::Result<()>{
-    // println!("readelion episode 1: angle's attack");
+fn set_dir_entries(path:&Path, base :&Path,map:&mut HashMap<String, String>) -> io::Result<()>{
+    println!("readelion episode 1: angle's attack");
     for entry in fs::read_dir(path)? {
         let entry: DirEntry = entry?;
-        let path: PathBuf = entry.path();
+        let _entry: PathBuf = entry.path();
+        let entry_string = _entry.to_string_lossy().to_string();
         
-        if path.is_file() && path.extension().unwrap_or_default() == "rpy" {
-            if let (Some(file_name), Some(parent_name)) = (path.file_name(), path.parent().and_then(|p| p.file_name())) {
-                    let clave = format!("{}/{}", parent_name.to_string_lossy(), file_name.to_string_lossy());
-                    map.insert(clave, path.to_string_lossy().to_string());
-                }
-            // map.insert(path.file_name().unwrap().to_string_lossy().to_string(),path.to_string_lossy().to_string());
+        if _entry.is_file() && _entry.extension().unwrap_or_default() == "rpy" {
+            let clave = _entry.strip_prefix(base).unwrap_or(&_entry).to_string_lossy().to_string();
+            map.insert(clave, entry_string);
         }
         else if path.is_dir(){
-            let _= set_dir_entries(&path, map);
+            if entry_string.ends_with("_replaced"){continue}
+            let _= set_dir_entries(&_entry, base, map);
         }
     }
-    // println!("end of readelion");
+    println!("end of readelion");
     Ok(())
-}
-fn wait_input() { println!("\nEnter to continue");
-    let mut input = String::new();
-    std::io::stdin().read_line(&mut input).unwrap();
 }
 
 fn folder_mode() -> io::Result<()>{
-    // println!("Do you want the diffs in one file, or diffs files for each file?");
-    // let diff_in_one_file = get_bool_for_input_1_or_2("Select mode:\n(1) - one diffs file \n(2) - many diffs files", "one file", "many files");
+    println!("Do you want the diffs in one file, or diffs files for each file?");
+    let diff_in_one_file = get_bool_for_input_1_or_2("Select mode:\n(1) - one diffs file \n(2) - many diffs files", "one file", "many files");
 
-    let old_path:String = get_path_input("Enter old folder:", false);
-    let new_path:String = get_path_input("Enter new folder:", false);
-    
+    let binding = get_path_input("Enter old folder:", false);
+    let old_path = Path::new(&binding);
     let mut old_files: HashMap<String, String> = HashMap::new();
-    let _= set_dir_entries(&Path::new(&old_path),&mut old_files);
-    println!("old file list: {:?}",old_files);
-    
+    let _= set_dir_entries(&old_path,&old_path,&mut old_files);
+    println!("old file list: ");
+    for key in old_files.keys() {println!("{}", key);}
+
+
+    let binding = get_path_input("Enter new folder:", false);
+    let new_path = Path::new(&binding);
     let mut new_files: HashMap<String, String> = HashMap::new();
-    let _= set_dir_entries(&Path::new(&new_path),&mut new_files);
-    println!("new file list: {:?}",new_files);
+    let _= set_dir_entries(&new_path,&new_path,&mut new_files);
+    for key in new_files.keys() {println!("{}", key);}
 
     //files to exclude
     //y que introduzcas las keys de archivos que no quieras que se procesen 
@@ -107,24 +110,56 @@ fn folder_mode() -> io::Result<()>{
     let mut differences_in_file: Vec<String>=Vec::new();
     let mut no_matching_files: Vec<String>= Vec::new();
     no_matching_files.push("Files without old version:".to_string());
-    no_matching_files.push(String::default());
-    for new_file in new_files{
+
+    let output_path = new_path.parent().unwrap().join("_replaced");
+    fs::create_dir_all(&output_path).unwrap();
+
+    for new_file in &new_files{
         // let old_file = old_files.get(&new_file.0);
-        if let Some(old_file) = old_files.get(&new_file.0){
+        if let Some(old_file) = old_files.get(new_file.0){
             println!("found file match: {}",new_file.0);//deberia comparar todos primero,luego meterlo en tupla y dejar los no matching.
-            let diff = process_file(&new_file.1,old_file);//, diff_in_one_file).unwrap()
-            if !diff.is_empty() {
-                differences_in_file.push("\n".to_string());
-                differences_in_file.push(format!("In file: {}", new_file.1));
-                differences_in_file.extend(diff);
+            let (processed_content, diff) = process_file(&new_file.1,old_file);//, diff_in_one_file).unwrap()
+            if diff.is_empty() {
+                println!("No changes in file: {}", new_file.1);
             }
-            else {
-                no_matching_files.push(new_file.0);
+            else{
+                let _new =Path::new(&new_file.1);
+                let name= _new.file_name().unwrap().to_str().unwrap();
+
+                let relative = _new.parent().unwrap().strip_prefix(new_path).unwrap();
+                let new_output = output_path.join(relative);
+                fs::create_dir_all(&new_output).unwrap();
+                create_processed_copy(new_output.to_str().unwrap(), name, &processed_content);
+                if diff_in_one_file{
+                    differences_in_file.push("".to_string());
+                    differences_in_file.push(format!("In file: {}", new_file.1));
+                    differences_in_file.extend(diff);
+                    }
+                else {
+                    let _ = save_diff(new_output.to_str().unwrap(), name, &diff);
+                }
             }
         }
-    };
-    println!("diff: {:?}",differences_in_file);
-    println!("no matching: {:?}",no_matching_files);
+        else {
+             no_matching_files.push(new_file.1.to_string());
+             println!("no matching with: {}", new_file.1);
+            }
+        };
+        differences_in_file.push(String::default());
+        no_matching_files.push(String::default());
+        no_matching_files.push("Files without new version:".to_string());
+        for old_file in old_files {
+            if let Some(_file) = new_files.get(&old_file.0) {continue;}
+            else{no_matching_files.push(old_file.1);}
+        }
+        if diff_in_one_file {
+            differences_in_file.push(String::default());
+            differences_in_file.extend(no_matching_files);
+            let _ = save_diff(output_path.to_str().unwrap(), "diff.txt", &differences_in_file);
+        }
+        else {
+            let _ = save_diff(output_path.to_str().unwrap(), "no_matching_files.txt", &no_matching_files);
+        }
     wait_input();
     Ok(())
 }
@@ -133,14 +168,25 @@ fn file_mode() -> io::Result<()>{
     let old_path:String = get_path_input("Enter old file:", true);
     let new_path:String = get_path_input("Enter new file:", true);
     wait_input();
-    let diff = process_file(&old_path, &new_path);//,true
-    // todo!();
-    let _ = save_diff(&new_path,&diff);
+    let (processed_content, diff) = process_file(&old_path, &new_path);//,true
+
+    if diff.is_empty() {
+        println!("No changes found in: {new_path}")
+    } else {
+        let _new_path = Path::new(&new_path);
+        if let Some(parent) = _new_path.parent() {
+            let outut_path = parent.join("_replaced");
+            fs::create_dir_all(&outut_path).unwrap();
+            let name = _new_path.file_name().unwrap().to_str().unwrap();
+            create_processed_copy(outut_path.to_str().unwrap(), name, &processed_content);
+        let _ = save_diff(&(outut_path.to_str().unwrap()), name,&diff);
+        }
+    }
     wait_input();
     Ok(())
 }
 
-fn process_file(old_path: &str, new_path: &str) -> Vec<String> {
+fn process_file(old_path: &str, new_path: &str) -> (String, Vec<String>) {
     let old_blocks = parse_translation_file(old_path);
     let new_blocks = parse_translation_file(new_path);
     let mut changes = Vec::new();
@@ -191,11 +237,7 @@ fn process_file(old_path: &str, new_path: &str) -> Vec<String> {
         }
     }
     
-    if let Err(e) = create_processed_copy(new_path, &processed_content) {
-        eprintln!("Failed to create processed file: {}", e);
-    }
-    
-    changes
+   (processed_content, changes)
 }
 
 fn parse_translation_file(path: &str) -> Vec<TranslationBlock> {
@@ -345,14 +387,9 @@ fn extract_string_pairs(lines: &[String]) -> Vec<StringPair> {
     pairs
 }
 
+fn save_diff(new_path: &str, name : &str, diff: &Vec<String>) -> io::Result<()> {
+    let output_path = PathBuf::from(new_path).join(name.replace(".rpy", ".txt"));
 
-fn save_diff(new_path: &str, diff: &Vec<String>) -> io::Result<()> {
-    if diff.is_empty() {
-        return Ok(());
-    }
-    let mut output_path = PathBuf::from(new_path);
-    output_path.set_extension("txt");
-    
     let output_file = File::create(&output_path)?;
     let mut writer = BufWriter::new(output_file);
     
@@ -360,18 +397,17 @@ fn save_diff(new_path: &str, diff: &Vec<String>) -> io::Result<()> {
         writeln!(writer, "{}", discrepancia)?;
     }
     writer.flush()?;
-    println!("diff: {}", output_path.display());
+    println!("Saved diff at: {}", output_path.display());
     Ok(())
 }
-fn create_processed_copy(new_path: &str, processed_content: &str) -> std::io::Result<()> {
+fn create_processed_copy(new_path: &str, name: &str, processed_content: &str){
     let path = Path::new(new_path);
-    let file_name = path.file_name().unwrap().to_str().unwrap();
-    let parent_dir = path.parent().unwrap_or(Path::new("."));
-    
-    let processed_path = parent_dir.join(format!("_processed_{}", file_name));
-    fs::write(processed_path, processed_content)
+    let processed_path = path.join(name);//parent_dir.join(name);
+    if let Err(e) = fs::write(&processed_path, processed_content){
+        eprintln!("Failed to create processed file: {}", e);
+    }
+    else {println!("Saved file at: {:?}",processed_path.to_str().unwrap())}
 }
-
 
 #[derive(Debug, PartialEq)]
 struct TranslationBlock {

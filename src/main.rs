@@ -227,17 +227,65 @@ fn process_file(old_path: &str, new_path: &str) -> (String, Vec<String>) {
                 processed_content.push_str(line);
                 processed_content.push('\n');
             }
-            changes.push(format!("NEW: {}", new_block.header));
+            changes.push(format!("{{NEW}} {{{}}} > {{{}}}", new_block.comment, new_block.header));
         }
     }
     
     for old_block in &old_blocks {
         if !new_blocks.iter().any(|b| b.header == old_block.header) {
-            changes.push(format!("REMOVED: {}", old_block.header));
+            changes.push(format!("{{REMOVED}} {{{}}} > {{{}}}", old_block.comment, old_block.header));
         }
     }
     
    (processed_content, changes)
+}
+
+fn process_strings_content(old_lines: &[String], new_lines: &[String]) -> (String, Vec<String>) {
+    let mut content = String::new();
+    let mut changes = Vec::new();
+    
+    let old_strings = extract_string_pairs(old_lines);
+    let new_strings = extract_string_pairs(new_lines);
+    
+    for new_str in &new_strings {
+        // INCLUIR el comentario "# game/" ANTES de cada par old/new
+        if !new_str.comment.is_empty() {
+            content.push_str(&new_str.comment);
+            content.push('\n');
+        }
+        
+        if let Some(old_translation) = old_strings.iter().find(|s| s.old_lines == new_str.old_lines) {
+            // String existente - usar traducción vieja
+            for line in &old_translation.old_lines {
+                content.push_str(line);
+                content.push('\n');
+            }
+            for line in &old_translation.new_lines {
+                content.push_str(line);
+                content.push('\n');
+            }
+        } else {
+            // String nuevo - usar contenido nuevo
+            for line in &new_str.old_lines {
+                content.push_str(line);
+                content.push('\n');
+            }
+            for line in &new_str.new_lines {
+                content.push_str(line);
+                content.push('\n');
+            }
+            changes.push(format!("{{NEW_STRING}} {{{}}} > {{{}}}", new_str.comment,new_str.old_lines[0]));
+        }
+    }
+    
+    for old_str in &old_strings {
+
+        if !new_strings.iter().any(|s| s.old_lines == old_str.old_lines) {
+            changes.push(format!("{{REMOVED_STRING}} {{{}}} > {{{}}}", old_str.comment,old_str.old_lines[0]));
+        }
+    }
+    
+    (content, changes)
 }
 
 fn parse_translation_file(path: &str) -> Vec<TranslationBlock> {
@@ -276,53 +324,6 @@ fn parse_translation_file(path: &str) -> Vec<TranslationBlock> {
     }
     
     blocks
-}
-
-fn process_strings_content(old_lines: &[String], new_lines: &[String]) -> (String, Vec<String>) {
-    let mut content = String::new();
-    let mut changes = Vec::new();
-    
-    let old_strings = extract_string_pairs(old_lines);
-    let new_strings = extract_string_pairs(new_lines);
-    
-    for new_str in &new_strings {
-        // INCLUIR el comentario "# game/" ANTES de cada par old/new
-        if !new_str.comment.is_empty() {
-            content.push_str(&new_str.comment);
-            content.push('\n');
-        }
-        
-        if let Some(old_translation) = old_strings.iter().find(|s| s.old_lines == new_str.old_lines) {
-            // String existente - usar traducción vieja
-            for line in &old_translation.old_lines {
-                content.push_str(line);
-                content.push('\n');
-            }
-            for line in &old_translation.new_lines {
-                content.push_str(line);
-                content.push('\n');
-            }
-        } else {
-            // String nuevo - usar contenido nuevo
-            for line in &new_str.old_lines {
-                content.push_str(line);
-                content.push('\n');
-            }
-            for line in &new_str.new_lines {
-                content.push_str(line);
-                content.push('\n');
-            }
-            changes.push(format!("NEW_STRING: {:?}", new_str.old_lines));
-        }
-    }
-    
-    for old_str in &old_strings {
-        if !new_strings.iter().any(|s| s.old_lines == old_str.old_lines) {
-            changes.push(format!("MISSING_STRING: {:?}", old_str.old_lines));
-        }
-    }
-    
-    (content, changes)
 }
 
 // Mejorar la extracción de pares strings
@@ -365,7 +366,7 @@ fn extract_string_pairs(lines: &[String]) -> Vec<StringPair> {
             current_old.push(line.to_string());
             in_old = true;
             in_new = false;
-        } else if trimmed.starts_with("new \"") {
+        } else if trimmed.starts_with("new \"") || trimmed.starts_with("new _p(") {
             current_new.push(line.to_string());
             in_new = true;
             in_old = false;

@@ -6,12 +6,14 @@ use std::path::{Path, PathBuf};
 fn main() -> io::Result<()> {
 
     println!("Instructions:");
-    println!("- By now, you should have the folder with the new generated translations, and, your completed translation folder somewhere else. \nIf you want to keep it in the \"tl\" folder, with the new generated folder, rename it with an underscore or something.");
+    println!("- By now, you should have the folder with the new generated translations, and, your completed translation folder somewhere else or with other name.");
     println!("- First, enter the folder or file with your translation, then the new one with the new keys.");
+    println!("- The output will be one file with the applied changes and another with the detected changes.");
+    println!("- Folder mode will recreate the folder structure, so you can move its contents by overwriting the contents of the new folder.");
     println!("Notes:");
-    println!("- The processed folder will be in the same location as the new folder, adding \"_replaced\" to the end of the name.");
     println!("- A deleted or added line is indistinguishable from a dialogue slightly changed.");
-    println!("- The files are searched for by their name and the folder they'are in. If the developer moved a file to a different folder, or simply renamed it, they will be treated as new files. You can process those files individually later.");
+    println!("- The files are searched for by their path. If the developer moved a file to a different folder, or simply renamed it, they will be treated as new files. You can process those files individually later.");
+    println!("- The processed folder will be in the same location as the new folder, adding \"_replaced\" to the end of the name.");
     println!("- Folders with the name \"_replaced\" will be ignored.");
 
     let mode = get_bool_for_input_1_or_2("Select mode:\n(1) - file\n(2) - folder","file","folder");
@@ -66,7 +68,7 @@ fn get_path_input(message:&str, is_file: bool) -> String {
     }
 }
 fn set_dir_entries(path:&Path, base :&Path,map:&mut HashMap<String, String>) -> io::Result<()>{
-    println!("readelion episode 1: angle's attack");
+    // println!("readelion episode 1: angle's attack");
     for entry in fs::read_dir(path)? {
         let entry: DirEntry = entry?;
         let _entry: PathBuf = entry.path();
@@ -81,7 +83,7 @@ fn set_dir_entries(path:&Path, base :&Path,map:&mut HashMap<String, String>) -> 
             let _= set_dir_entries(&_entry, base, map);
         }
     }
-    println!("end of readelion");
+    // println!("end of readelion");
     Ok(())
 }
 
@@ -101,9 +103,10 @@ fn folder_mode() -> io::Result<()>{
     let new_path = Path::new(&binding);
     let mut new_files: HashMap<String, String> = HashMap::new();
     let _= set_dir_entries(&new_path,&new_path,&mut new_files);
+    println!("new file list: ");
     for key in new_files.keys() {println!("{}", key);}
 
-    //files to exclude
+    //TODO: files to exclude
     //y que introduzcas las keys de archivos que no quieras que se procesen 
     wait_input();
 
@@ -118,7 +121,7 @@ fn folder_mode() -> io::Result<()>{
         // let old_file = old_files.get(&new_file.0);
         if let Some(old_file) = old_files.get(new_file.0){
             println!("found file match: {}",new_file.0);//deberia comparar todos primero,luego meterlo en tupla y dejar los no matching.
-            let (processed_content, diff) = process_file(&new_file.1,old_file);//, diff_in_one_file).unwrap()
+            let (processed_content, diff) = process_file(&old_file,new_file.1);//, diff_in_one_file).unwrap()
             if diff.is_empty() {
                 println!("No changes in file: {}", new_file.1);
             }
@@ -132,7 +135,7 @@ fn folder_mode() -> io::Result<()>{
                 create_processed_copy(new_output.to_str().unwrap(), name, &processed_content);
                 if diff_in_one_file{
                     differences_in_file.push("".to_string());
-                    differences_in_file.push(format!("In file: {}", new_file.1));
+                    differences_in_file.push(format!("In file: {{{}}} > {{{}}}", old_file, new_file.1));
                     differences_in_file.extend(diff);
                     }
                 else {

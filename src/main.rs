@@ -91,7 +91,10 @@ fn set_dir_entries(path:&Path, base :&Path,map:&mut HashMap<String, String>) -> 
 
 fn folder_mode() -> io::Result<()>{
     println!("Do you want the diffs in one file, or diffs files for each file?");
-    let diff_in_one_file = get_bool_for_input_1_or_2("Select mode:\n(1) - one diffs file \n(2) - many diffs files", "one file", "many files");
+    let diff_in_many_files = get_bool_for_input_1_or_2("Select mode:\n(1) - many diffs files\n(2) - one diffs file", "many files", "one file");
+
+    println!("Do you want to copy old files without changes in the processed folder?");
+    let copy_unchanged_files = get_bool_for_input_1_or_2("Select mode:\n(1) - copy old\n(2) - do nothing", "Yes", "No");
 
     let binding = get_path_input("Enter old folder:", false);
     let old_path = Path::new(&binding);
@@ -100,7 +103,7 @@ fn folder_mode() -> io::Result<()>{
     println!("old file list: ");
     for key in old_files.keys() {println!("{}", key);}
 
-
+    println!("");
     let binding = get_path_input("Enter new folder:", false);
     let new_path = Path::new(&binding);
     let mut new_files: HashMap<String, String> = HashMap::new();
@@ -114,9 +117,9 @@ fn folder_mode() -> io::Result<()>{
 
     let mut differences_in_file: Vec<String>=Vec::new();
     let mut no_matching_files: Vec<String>= Vec::new();
-    let mut no_changed_file: Vec<String>= Vec::new();
+    let mut no_changed_files: Vec<String>= Vec::new();
     no_matching_files.push("Files without old version:".to_string());
-    no_changed_file.push("Files without changes:".to_string());
+    no_changed_files.push("Files without changes:".to_string());
 
     let output_path = new_path.parent().unwrap().join("_replaced");
     fs::create_dir_all(&output_path).unwrap();
@@ -124,27 +127,29 @@ fn folder_mode() -> io::Result<()>{
     for new_file in &new_files{
         // let old_file = old_files.get(&new_file.0);
         if let Some(old_file) = old_files.get(new_file.0){
-            println!("found file match: {}",new_file.0);//deberia comparar todos primero,luego meterlo en tupla y dejar los no matching.
-            let (processed_content, diff) = process_file(&old_file,new_file.1);//, diff_in_one_file).unwrap()
+            println!("Found file match: {}",new_file.0);//deberia comparar todos primero,luego meterlo en tupla y dejar los no matching.
+            let (processed_content, diff) = process_file(&old_file,new_file.1);//, diff_in_many_files).unwrap()
             
             let _new =Path::new(&new_file.1);
             let name= _new.file_name().unwrap().to_str().unwrap();
             let relative = _new.parent().unwrap().strip_prefix(new_path).unwrap();
             let new_output = output_path.join(relative);
-            fs::create_dir_all(&new_output).unwrap();
 
             if diff.is_empty() {
                 println!("No changes in file: {}", new_file.1);
-                no_changed_file.push(format!("{}",new_file.1));
+                no_changed_files.push(format!("{}",new_file.1));
                 let content = fs::read_to_string(old_file)?;
-                let _ = fs::write(new_output, content);
+                if copy_unchanged_files{
+                    fs::create_dir_all(&new_output).unwrap();
+                    create_processed_copy(new_output.to_str().unwrap(), name, &content);}
             }
             else{
+                fs::create_dir_all(&new_output).unwrap();
                 create_processed_copy(new_output.to_str().unwrap(), name, &processed_content);
-                if diff_in_one_file{
+                if !diff_in_many_files{
                     differences_in_file.push(format!("In file: {{{}}} > {{{}}}", old_file, new_file.1));
                     differences_in_file.extend(diff);
-                    differences_in_file.push("".to_string());
+                    differences_in_file.push(String::default());
                     }
                 else {
                     let _ = save_diff(new_output.to_str().unwrap(), name, &diff);
@@ -153,7 +158,7 @@ fn folder_mode() -> io::Result<()>{
         }
         else {
              no_matching_files.push(new_file.1.to_string());
-             println!("no matching with: {}", new_file.1);
+             println!("No matching file with: {}", new_file.1);
             }
         };
         differences_in_file.push(String::default());
@@ -163,16 +168,16 @@ fn folder_mode() -> io::Result<()>{
             if let Some(_file) = new_files.get(&old_file.0) {continue;}
             else{no_matching_files.push(old_file.1);}
         }
-        if diff_in_one_file {
+        if !diff_in_many_files {
             differences_in_file.push(String::default());
             differences_in_file.extend(no_matching_files);
             differences_in_file.push(String::default());
-            differences_in_file.extend(no_changed_file);
+            differences_in_file.extend(no_changed_files);
             let _ = save_diff(output_path.to_str().unwrap(), "diff.txt", &differences_in_file);
         }
         else {
-            no_matching_files.extend(no_changed_file);
-            let _ = save_diff(output_path.to_str().unwrap(), "no_matching_files.txt", &no_matching_files);
+            no_matching_files.extend(no_changed_files);
+            let _ = save_diff(output_path.to_str().unwrap(), "no_matching_or_changed_files.txt", &no_matching_files);
         }
     wait_input();
     Ok(())

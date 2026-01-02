@@ -17,7 +17,7 @@ Choose whether you want each .rpy file to have its own separate diff file, or if
 3. What to do with unchanged files:
 When a file is found to be unchanged, choose whether to copy the translated file to the new _replaced folder, or simply continue with the next one. If a folder had no files with changes and you choose not to copy them, it will not be created, to make it easier to see what changed.
 
-Note: The program will look for changes in the line that declares the key, `translate *language* *key*:`. All subsequent lines will be counted as belonging to that key, broken by the next line comment that usually precedes each declaration, `# game/*route*:*line*`.
+Note: The program will look for changes in the line that declares the key, `translate *language* *key*:`. All subsequent lines will be counted as belonging to that key, broken by the next line comment that usually precedes each declaration, `# game/*path*:*line*`.
 
 
 # [ES]{Original}
@@ -38,4 +38,4 @@ Elije si quieres que cada .rpy tenga su propio archivo de diferencias aparte, o 
 3. El que hacer con los archivos sin cambios:
 Cuando se encuentre que un archivo no ha tenido cambios, elige si copiar el archivo traducido a la nueva carpeta _replaced, o simplemente continuar con el siguiente. Si una carpeta no tenia archivos con cambios y elijes no copiarlos, esta no se creara, para facilitar ver que cambio.
 
-Nota: El programa buscara cambios en la linea que declara la clave, `translate *language* *key*:`. Se contara como perteneciente a esa clave todas las lineas siguentes, se cortara con el proximo comentario de linea que suele preceder cada declaracion, `# game/*rute*:*line*`.
+Nota: El programa buscara cambios en la linea que declara la clave, `translate *language* *key*:`. Se contara como perteneciente a esa clave todas las lineas siguentes, se cortara con el proximo comentario de linea que suele preceder cada declaracion, `# game/*ruta*:*line*`.
